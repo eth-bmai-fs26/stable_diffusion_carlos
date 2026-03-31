@@ -1,5 +1,6 @@
 """Training loops and generation pipeline for Stable Diffusion from Scratch."""
 
+import copy
 import torch
 import torch.nn.functional as F
 from .models import NoiseScheduler, tokenize
@@ -34,14 +35,21 @@ def train_clip(model, dataset, epochs=100, lr=1e-3, tau=0.07):
 
 
 def train_denoiser(model, dataset, scheduler, text_encoder, epochs=300,
-                   lr=1e-4, is_mlp=False):
+                   lr=1e-4, is_mlp=False, steps_per_epoch=1, ema_decay=0.0):
     """Train a denoiser (MicroUNet or NaiveMLP).
 
     Random timestep sampling, MSE loss on noise prediction.
+    Multiple gradient steps per epoch expose the model to diverse noise samples.
+    When ema_decay > 0, maintains exponential moving average of weights and
+    copies them back to the model at the end for better generation quality.
     Returns list of per-epoch losses.
     """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     losses = []
+
+    # EMA: maintain a smoothed copy of weights
+    if ema_decay > 0:
+        ema_state = copy.deepcopy(model.state_dict())
 
     # Prepare data
     images = torch.stack([dataset[i][0] for i in range(len(dataset))])
@@ -53,27 +61,42 @@ def train_denoiser(model, dataset, scheduler, text_encoder, epochs=300,
         text_embs = text_encoder(token_ids)  # (N, 32)
 
     for epoch in range(epochs):
-        optimizer.zero_grad()
+        epoch_loss = 0.0
+        for _ in range(steps_per_epoch):
+            optimizer.zero_grad()
 
-        # Random timesteps for each sample
-        B = len(images)
-        t = torch.randint(0, scheduler.T, (B,))
-        noise = torch.randn_like(images)
-        x_t = scheduler.add_noise(images, t, noise)
+            # Random timesteps for each sample
+            B = len(images)
+            t = torch.randint(0, scheduler.T, (B,))
+            noise = torch.randn_like(images)
+            x_t = scheduler.add_noise(images, t, noise)
 
-        # Time embeddings
-        t_emb = scheduler.get_time_embedding(t)  # (B, 32)
+            # Time embeddings
+            t_emb = scheduler.get_time_embedding(t)  # (B, 32)
 
-        # Predict noise
-        predicted_noise = model(x_t, t_emb, text_embs)
+            # Predict noise
+            predicted_noise = model(x_t, t_emb, text_embs)
 
-        loss = F.mse_loss(predicted_noise, noise)
-        loss.backward()
-        optimizer.step()
-        losses.append(loss.item())
+            loss = F.mse_loss(predicted_noise, noise)
+            loss.backward()
+            optimizer.step()
+
+            # Update EMA weights
+            if ema_decay > 0:
+                with torch.no_grad():
+                    for key, param in model.state_dict().items():
+                        ema_state[key].mul_(ema_decay).add_(param, alpha=1 - ema_decay)
+
+            epoch_loss += loss.item()
+
+        losses.append(epoch_loss / steps_per_epoch)
 
         if (epoch + 1) % 50 == 0:
-            print(f'Denoiser Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}')
+            print(f'Denoiser Epoch {epoch+1}/{epochs}, Loss: {losses[-1]:.4f}')
+
+    # Copy EMA weights back to model for generation
+    if ema_decay > 0:
+        model.load_state_dict(ema_state)
 
     return losses
 

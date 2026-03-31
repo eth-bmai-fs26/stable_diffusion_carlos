@@ -38,7 +38,8 @@ def main():
     scheduler = NoiseScheduler(T=50)
     unet = MicroUNet()
     unet_losses = train_denoiser(unet, dataset, scheduler,
-                                  clip_model.text_encoder, epochs=1000, lr=1e-4)
+                                  clip_model.text_encoder, epochs=1500, lr=3e-4,
+                                  steps_per_epoch=10)
     print(f"Final UNet loss: {unet_losses[-1]:.4f}")
     print(f"Loss reduction: {unet_losses[0]:.4f} -> {unet_losses[-1]:.4f} "
           f"({(1 - unet_losses[-1]/unet_losses[0]):.1%} decrease)")

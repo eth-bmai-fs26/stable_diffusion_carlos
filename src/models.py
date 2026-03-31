@@ -150,14 +150,17 @@ class CrossAttention(nn.Module):
 
 
 class MicroUNet(nn.Module):
-    """Minimal UNet with cross-attention at bottleneck. ~150K params."""
+    """Minimal UNet with cross-attention at bottleneck. ~160K params."""
 
     def __init__(self, time_emb_dim=32, text_emb_dim=32):
         super().__init__()
-        # Encoder
+        # Encoder with GroupNorm for training stability
         self.enc1 = nn.Conv2d(3, 32, 3, padding=1)
+        self.norm1 = nn.GroupNorm(8, 32)
         self.enc2 = nn.Conv2d(32, 64, 3, stride=2, padding=1)
+        self.norm2 = nn.GroupNorm(8, 64)
         self.enc3 = nn.Conv2d(64, 128, 3, stride=2, padding=1)
+        self.norm3 = nn.GroupNorm(8, 128)
 
         # Time embedding MLP
         self.time_mlp = nn.Sequential(
@@ -169,9 +172,11 @@ class MicroUNet(nn.Module):
         self.cross_attn = CrossAttention(img_dim=128, text_dim=text_emb_dim,
                                          head_dim=32)
 
-        # Decoder with skip connections
+        # Decoder with skip connections and GroupNorm
         self.dec1 = nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1)
+        self.norm4 = nn.GroupNorm(8, 64)
         self.dec2 = nn.ConvTranspose2d(128, 32, 4, stride=2, padding=1)  # 64+64=128 with skip
+        self.norm5 = nn.GroupNorm(8, 32)
         self.final = nn.Conv2d(64, 3, 3, padding=1)  # 32+32=64 with skip
 
     def forward(self, x, t_emb, text_emb):
@@ -185,9 +190,9 @@ class MicroUNet(nn.Module):
     def forward_with_attention(self, x, t_emb, text_emb):
         """Returns (output, attention_weights)."""
         # Encoder
-        e1 = F.relu(self.enc1(x))      # (B, 32, 32, 32)
-        e2 = F.relu(self.enc2(e1))     # (B, 64, 16, 16)
-        e3 = F.relu(self.enc3(e2))     # (B, 128, 8, 8)
+        e1 = F.relu(self.norm1(self.enc1(x)))      # (B, 32, 32, 32)
+        e2 = F.relu(self.norm2(self.enc2(e1)))     # (B, 64, 16, 16)
+        e3 = F.relu(self.norm3(self.enc3(e2)))     # (B, 128, 8, 8)
 
         # Add time embedding (broadcast over spatial dims)
         t = self.time_mlp(t_emb)        # (B, 128)
@@ -205,9 +210,9 @@ class MicroUNet(nn.Module):
         e3 = attn_out.reshape(B, H, W, C).permute(0, 3, 1, 2)  # (B, 128, 8, 8)
 
         # Decoder with skip connections
-        d1 = F.relu(self.dec1(e3))     # (B, 64, 16, 16)
+        d1 = F.relu(self.norm4(self.dec1(e3)))     # (B, 64, 16, 16)
         d1 = torch.cat([d1, e2], dim=1)  # (B, 128, 16, 16)
-        d2 = F.relu(self.dec2(d1))     # (B, 32, 32, 32)
+        d2 = F.relu(self.norm5(self.dec2(d1)))     # (B, 32, 32, 32)
         d2 = torch.cat([d2, e1], dim=1)  # (B, 64, 32, 32)
         out = self.final(d2)            # (B, 3, 32, 32)
 
