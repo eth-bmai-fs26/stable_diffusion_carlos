@@ -206,8 +206,8 @@ class MicroUNet(nn.Module):
         text_feat = text_emb.unsqueeze(1)  # (B, 1, 32)
 
         attn_out, attn_weights = self.cross_attn(patches, text_feat)
-        # Reshape back to spatial
-        e3 = attn_out.reshape(B, H, W, C).permute(0, 3, 1, 2)  # (B, 128, 8, 8)
+        # Residual connection + reshape back to spatial
+        e3 = (patches + attn_out).reshape(B, H, W, C).permute(0, 3, 1, 2)  # (B, 128, 8, 8)
 
         # Decoder with skip connections
         d1 = F.relu(self.norm4(self.dec1(e3)))     # (B, 64, 16, 16)
