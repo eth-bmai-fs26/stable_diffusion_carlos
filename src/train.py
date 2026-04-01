@@ -35,13 +35,16 @@ def train_clip(model, dataset, epochs=100, lr=1e-3, tau=0.07):
 
 
 def train_denoiser(model, dataset, scheduler, text_encoder, epochs=300,
-                   lr=1e-4, is_mlp=False, steps_per_epoch=1, ema_decay=0.0):
+                   lr=1e-4, is_mlp=False, steps_per_epoch=1, ema_decay=0.0,
+                   cfg_dropout=0.0):
     """Train a denoiser (MicroUNet or NaiveMLP).
 
     Random timestep sampling, MSE loss on noise prediction.
     Multiple gradient steps per epoch expose the model to diverse noise samples.
     When ema_decay > 0, maintains exponential moving average of weights and
     copies them back to the model at the end for better generation quality.
+    When cfg_dropout > 0, randomly replaces text embeddings with null embeddings
+    to enable classifier-free guidance during generation.
     Returns list of per-epoch losses.
     """
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -59,6 +62,9 @@ def train_denoiser(model, dataset, scheduler, text_encoder, epochs=300,
     # Pre-compute text embeddings
     with torch.no_grad():
         text_embs = text_encoder(token_ids)  # (N, 32)
+        # Null text embedding for CFG dropout
+        null_tokens = tokenize('<pad> <pad>')
+        null_emb = text_encoder(null_tokens.unsqueeze(0))  # (1, 32)
 
     for epoch in range(epochs):
         epoch_loss = 0.0
@@ -74,8 +80,16 @@ def train_denoiser(model, dataset, scheduler, text_encoder, epochs=300,
             # Time embeddings
             t_emb = scheduler.get_time_embedding(t)  # (B, 32)
 
+            # CFG dropout: randomly replace text embeddings with null
+            if cfg_dropout > 0:
+                drop_mask = torch.rand(B) < cfg_dropout
+                cond_embs = text_embs.clone()
+                cond_embs[drop_mask] = null_emb
+            else:
+                cond_embs = text_embs
+
             # Predict noise
-            predicted_noise = model(x_t, t_emb, text_embs)
+            predicted_noise = model(x_t, t_emb, cond_embs)
 
             loss = F.mse_loss(predicted_noise, noise)
             loss.backward()
