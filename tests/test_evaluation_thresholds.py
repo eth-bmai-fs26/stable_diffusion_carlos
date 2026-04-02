@@ -74,12 +74,12 @@ class TestColorAccuracy:
                    'red triangle', 'blue triangle', 'green circle']
 
         null_tokens = tokenize('<pad> <pad>')
-        null_emb = clip.text_encoder(null_tokens.unsqueeze(0))
+        null_emb = clip.text_encoder.encode_tokens(null_tokens.unsqueeze(0))
 
         correct = 0
         for prompt in prompts:
             tokens = tokenize(prompt)
-            text_emb = clip.text_encoder(tokens.unsqueeze(0))
+            text_emb = clip.text_encoder.encode_tokens(tokens.unsqueeze(0))
             # Try multiple seeds
             for seed in [42, 123, 7, 99, 2024]:
                 img, _ = generate_image(unet, scheduler, text_emb, null_emb,
@@ -114,12 +114,12 @@ class TestShapeAccuracy:
                    'red triangle', 'blue triangle', 'green circle']
 
         null_tokens = tokenize('<pad> <pad>')
-        null_emb = clip.text_encoder(null_tokens.unsqueeze(0))
+        null_emb = clip.text_encoder.encode_tokens(null_tokens.unsqueeze(0))
 
         correct = 0
         for prompt in prompts:
             tokens = tokenize(prompt)
-            text_emb = clip.text_encoder(tokens.unsqueeze(0))
+            text_emb = clip.text_encoder.encode_tokens(tokens.unsqueeze(0))
             for seed in [42, 123, 7, 99, 2024]:
                 img, _ = generate_image(unet, scheduler, text_emb, null_emb,
                                         guidance_scale=7.5, seed=seed)

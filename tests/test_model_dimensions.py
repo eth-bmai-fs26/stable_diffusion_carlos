@@ -42,6 +42,23 @@ class TestTextEncoder:
         norms = torch.norm(out, dim=-1)
         assert torch.allclose(norms, torch.ones(4), atol=1e-5)
 
+    def test_encode_tokens_shape(self):
+        enc = TextEncoder()
+        tokens = torch.randint(0, 12, (4, 4))
+        out = enc.encode_tokens(tokens)
+        assert out.shape == (4, 4, 32)
+
+    def test_encode_tokens_padding_zeroed(self):
+        enc = TextEncoder()
+        tokens = tokenize("red circle").unsqueeze(0)  # (1, 4) -> "red circle <pad> <pad>"
+        out = enc.encode_tokens(tokens)
+        # Positions 2 and 3 are <pad>, should be zero
+        assert torch.allclose(out[0, 2], torch.zeros(32), atol=1e-6)
+        assert torch.allclose(out[0, 3], torch.zeros(32), atol=1e-6)
+        # Positions 0 and 1 should NOT be zero
+        assert out[0, 0].abs().sum() > 0
+        assert out[0, 1].abs().sum() > 0
+
 
 class TestImageEncoder:
     def test_output_shape(self):
@@ -125,7 +142,7 @@ class TestMicroUNet:
         unet = MicroUNet()
         x = torch.randn(2, 3, 32, 32)
         t_emb = torch.randn(2, 32)
-        text_emb = torch.randn(2, 32)
+        text_emb = torch.randn(2, 4, 32)  # per-token
         out = unet(x, t_emb, text_emb)
         assert out.shape == (2, 3, 32, 32)
 
@@ -133,10 +150,19 @@ class TestMicroUNet:
         unet = MicroUNet()
         x = torch.randn(2, 3, 32, 32)
         t_emb = torch.randn(2, 32)
-        text_emb = torch.randn(2, 32)
+        text_emb = torch.randn(2, 4, 32)  # per-token
         out, attn = unet.forward_with_attention(x, t_emb, text_emb)
         assert out.shape == (2, 3, 32, 32)
-        assert attn.shape[0] == 2  # batch size
+        assert attn.shape == (2, 64, 4)  # (batch, patches, tokens)
+
+    def test_backward_compat_pooled(self):
+        """MicroUNet should still work with (B, 32) pooled text for NaiveMLP parity."""
+        unet = MicroUNet()
+        x = torch.randn(2, 3, 32, 32)
+        t_emb = torch.randn(2, 32)
+        text_emb = torch.randn(2, 32)  # old-style pooled
+        out = unet(x, t_emb, text_emb)
+        assert out.shape == (2, 3, 32, 32)
 
     def test_param_count(self):
         unet = MicroUNet()

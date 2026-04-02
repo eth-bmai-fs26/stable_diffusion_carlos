@@ -61,10 +61,14 @@ def train_denoiser(model, dataset, scheduler, text_encoder, epochs=300,
 
     # Pre-compute text embeddings
     with torch.no_grad():
-        text_embs = text_encoder(token_ids)  # (N, 32)
-        # Null text embedding for CFG dropout
-        null_tokens = tokenize('<pad> <pad>')
-        null_emb = text_encoder(null_tokens.unsqueeze(0))  # (1, 32)
+        if is_mlp:
+            text_embs = text_encoder(token_ids)  # (N, 32) pooled for MLP
+            null_tokens = tokenize('<pad> <pad>')
+            null_emb = text_encoder(null_tokens.unsqueeze(0))  # (1, 32)
+        else:
+            text_embs = text_encoder.encode_tokens(token_ids)  # (N, T, 32) per-token
+            null_tokens = tokenize('<pad> <pad>')
+            null_emb = text_encoder.encode_tokens(null_tokens.unsqueeze(0))  # (1, T, 32)
 
     for epoch in range(epochs):
         epoch_loss = 0.0
@@ -176,14 +180,14 @@ def evaluate_generation(model, scheduler, text_encoder, prompts,
 
     Returns: list of (prompt, image_tensor) tuples.
     """
-    # Null text embedding for CFG
+    # Null text embedding for CFG (per-token for UNet cross-attention)
     null_tokens = tokenize('<pad> <pad>')
-    null_text_emb = text_encoder(null_tokens.unsqueeze(0))
+    null_text_emb = text_encoder.encode_tokens(null_tokens.unsqueeze(0))
 
     results = []
     for prompt in prompts:
         tokens = tokenize(prompt)
-        text_emb = text_encoder(tokens.unsqueeze(0))
+        text_emb = text_encoder.encode_tokens(tokens.unsqueeze(0))
         img, _ = generate_image(model, scheduler, text_emb, null_text_emb,
                                 guidance_scale=guidance_scale, seed=seed)
         results.append((prompt, img))
