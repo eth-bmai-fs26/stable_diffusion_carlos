@@ -1,3 +1,7 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
 # LaTeX auxiliary files
 *.aux
 *.log

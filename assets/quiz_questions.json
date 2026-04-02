@@ -1,0 +1,126 @@
+{
+  "pre_test": [
+    {
+      "id": "Q1",
+      "knowledge_area": "CLIP function",
+      "question": "What is the primary role of CLIP in a text-to-image system?",
+      "options": {
+        "a": "It generates the final image pixels directly from text",
+        "b": "It translates text and images into a shared language so they can be compared",
+        "c": "It removes noise from images during the generation process",
+        "d": "It compresses images to reduce file size"
+      },
+      "answer": "b"
+    },
+    {
+      "id": "Q2",
+      "knowledge_area": "Stochasticity",
+      "question": "Why does the same text prompt produce different images each time?",
+      "options": {
+        "a": "The model has bugs that cause random behavior",
+        "b": "The process starts from random noise, and different starting noise leads to different valid outputs",
+        "c": "The text is interpreted differently each time",
+        "d": "The model forgets previous outputs"
+      },
+      "answer": "b"
+    },
+    {
+      "id": "Q3",
+      "knowledge_area": "Cross-attention mechanics",
+      "question": "What mechanism allows the text prompt to influence which parts of the image get modified?",
+      "options": {
+        "a": "The text is converted to pixels and overlaid on the image",
+        "b": "A random selection process picks image regions to modify",
+        "c": "Cross-attention lets each image region check the text to decide what to generate",
+        "d": "The entire image is regenerated from scratch at each step"
+      },
+      "answer": "c"
+    },
+    {
+      "id": "Q4",
+      "knowledge_area": "Failure diagnosis",
+      "question": "A generated image shows the right colors but wrong shapes. What is the most likely cause?",
+      "options": {
+        "a": "The text encoder is broken",
+        "b": "The denoiser lacks spatial awareness (no convolutional layers)",
+        "c": "The noise schedule is too aggressive",
+        "d": "The image resolution is too low"
+      },
+      "answer": "b"
+    },
+    {
+      "id": "Q5",
+      "knowledge_area": "Cost drivers",
+      "question": "Which factor has the biggest impact on the cost of generating an image?",
+      "options": {
+        "a": "The length of the text prompt",
+        "b": "The number of denoising steps (each requires a full model pass)",
+        "c": "The color palette of the output image",
+        "d": "The file format of the saved image"
+      },
+      "answer": "b"
+    }
+  ],
+  "post_test": [
+    {
+      "id": "Q1",
+      "knowledge_area": "CLIP function",
+      "question": "Your team says they 'fine-tuned CLIP for your product catalog.' What did they actually do?",
+      "options": {
+        "a": "They trained a model to generate product images from descriptions",
+        "b": "They trained a model to place product photos and descriptions near each other in a shared embedding space",
+        "c": "They built a search engine using keyword matching",
+        "d": "They compressed the product database for faster retrieval"
+      },
+      "answer": "b"
+    },
+    {
+      "id": "Q2",
+      "knowledge_area": "Stochasticity",
+      "question": "A client complains that 'the AI gives inconsistent results.' How do you explain this?",
+      "options": {
+        "a": "The model needs to be retrained with more data",
+        "b": "This is by design -- different random seeds produce different valid interpretations, like different artists painting the same scene",
+        "c": "There is a bug in the deployment pipeline",
+        "d": "The model is too small and needs more parameters"
+      },
+      "answer": "b"
+    },
+    {
+      "id": "Q3",
+      "knowledge_area": "Cross-attention mechanics",
+      "question": "Your vendor's model generates 'a silver watch on a wooden table' but the watch looks wooden. What went wrong?",
+      "options": {
+        "a": "The model doesn't understand the word 'silver'",
+        "b": "The training data didn't include enough watches",
+        "c": "Cross-attention is bleeding -- the material attributes are being applied to the wrong objects",
+        "d": "The image resolution is too low to show metallic textures"
+      },
+      "answer": "c"
+    },
+    {
+      "id": "Q4",
+      "knowledge_area": "Failure diagnosis",
+      "question": "Your team's custom model produces colorful but blobby images. What architectural change would you suggest?",
+      "options": {
+        "a": "Increase the text vocabulary size",
+        "b": "Replace the fully-connected denoiser with a convolutional one (UNet) for spatial awareness",
+        "c": "Use a longer text prompt",
+        "d": "Increase the number of denoising steps"
+      },
+      "answer": "b"
+    },
+    {
+      "id": "Q5",
+      "knowledge_area": "Cost drivers",
+      "question": "Your company wants to cut image generation costs by 50%. Which approach would be most effective?",
+      "options": {
+        "a": "Use shorter text prompts",
+        "b": "Reduce the number of denoising steps (e.g., from 50 to 25) or use a distilled model",
+        "c": "Generate smaller images and upscale them afterward",
+        "d": "Switch to a different programming language"
+      },
+      "answer": "b"
+    }
+  ]
+}

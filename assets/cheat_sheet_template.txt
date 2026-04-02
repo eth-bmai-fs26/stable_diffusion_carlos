@@ -1,0 +1,31 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    THE CO-PILOT REFERENCE CARD                               ║
+║            Stable Diffusion from Scratch: A Decision-Maker's Guide           ║
+╠══════════╦═══════════════╦═══════════════════════════╦════════════════════════╣
+║ Notebook ║  Component    ║  What It Does             ║  Co-Pilot Metaphor     ║
+╠══════════╬═══════════════╬═══════════════════════════╬════════════════════════╣
+║ NB1      ║ Raw           ║ Images = tensors of       ║ "Here are the parts    ║
+║          ║ Ingredients   ║ numbers; text = embedding ║  of the car and the    ║
+║          ║               ║ vectors; cosine sim       ║  map"                  ║
+║          ║               ║ measures closeness        ║                        ║
+╠══════════╬═══════════════╬═══════════════════════════╬════════════════════════╣
+║ NB2      ║ CLIP          ║ Learns shared embedding   ║ "The co-pilot learns   ║
+║          ║ (Translator)  ║ space; contrastive loss   ║  to read the map"      ║
+║          ║               ║ pulls matching pairs      ║                        ║
+║          ║               ║ together                  ║                        ║
+╠══════════╬═══════════════╬═══════════════════════════╬════════════════════════╣
+║ NB3      ║ Diffusion     ║ Forward: add noise.       ║ "The driver learns to  ║
+║          ║ (Engine)      ║ Reverse: predict & remove ║  navigate by being     ║
+║          ║               ║ noise. UNet preserves     ║  dropped at random     ║
+║          ║               ║ spatial structure.        ║  locations"            ║
+╠══════════╬═══════════════╬═══════════════════════════╬════════════════════════╣
+║ NB4      ║ Cross-Attn    ║ Q=image, K/V=text.        ║ "At every turn, the    ║
+║          ║ (Conversation)║ Each image region checks  ║  driver asks the       ║
+║          ║               ║ the text. Guidance scale  ║  co-pilot"             ║
+║          ║               ║ = co-pilot volume.        ║                        ║
+╠══════════╬═══════════════╬═══════════════════════════╬════════════════════════╣
+║ NB5      ║ Full Pipeline ║ Wire it all together:     ║ "Start the engine,     ║
+║          ║ (Road Trip)   ║ noise -> denoise with     ║  set the destination,  ║
+║          ║               ║ text guidance -> image.   ║  drive"                ║
+║          ║               ║ CFG = two passes.         ║                        ║
+╚══════════╩═══════════════╩═══════════════════════════╩════════════════════════╝
