@@ -54,7 +54,7 @@ def main():
                     'red triangle', 'blue triangle', 'green circle']
 
     null_tokens = tokenize('<pad> <pad>')
-    null_text_emb = clip_model.text_encoder(null_tokens.unsqueeze(0))
+    null_text_emb = clip_model.text_encoder.encode_tokens(null_tokens.unsqueeze(0))
 
     color_correct = 0
     shape_correct = 0
@@ -63,7 +63,7 @@ def main():
     from src.train import generate_image
     for idx, prompt in enumerate(test_prompts):
         tokens = tokenize(prompt)
-        text_emb = clip_model.text_encoder(tokens.unsqueeze(0))
+        text_emb = clip_model.text_encoder.encode_tokens(tokens.unsqueeze(0))
 
         # Use different seed per prompt; try a few seeds and guidance scales
         best_img = None

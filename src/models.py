@@ -37,7 +37,7 @@ class TextEncoder(nn.Module):
         self.fc2 = nn.Linear(hidden_dim, out_dim)
 
     def forward(self, token_ids):
-        """token_ids: (B, seq_len) -> (B, out_dim) L2-normalized."""
+        """token_ids: (B, seq_len) -> (B, out_dim) L2-normalized pooled embedding."""
         x = self.embedding(token_ids)  # (B, seq_len, embed_dim)
         # Mean pool over non-padding tokens
         mask = (token_ids != WORD_TO_IDX['<pad>']).unsqueeze(-1).float()
@@ -45,6 +45,19 @@ class TextEncoder(nn.Module):
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         return F.normalize(x, dim=-1)
+
+    def encode_tokens(self, token_ids):
+        """token_ids: (B, seq_len) -> (B, seq_len, out_dim) per-token embeddings.
+
+        Returns per-token features for cross-attention (NOT pooled).
+        Padding positions are zeroed out. Used by MicroUNet for meaningful
+        attention heatmaps over individual words.
+        """
+        x = self.embedding(token_ids)  # (B, seq_len, embed_dim)
+        mask = (token_ids != WORD_TO_IDX['<pad>']).unsqueeze(-1).float()
+        x = F.relu(self.fc1(x))  # (B, seq_len, hidden_dim)
+        x = self.fc2(x)          # (B, seq_len, out_dim)
+        return x * mask           # zero out padding positions
 
 
 class ImageEncoder(nn.Module):
@@ -181,7 +194,8 @@ class MicroUNet(nn.Module):
 
     def forward(self, x, t_emb, text_emb):
         """
-        x: (B, 3, 32, 32), t_emb: (B, 32), text_emb: (B, 32)
+        x: (B, 3, 32, 32), t_emb: (B, 32),
+        text_emb: (B, T, 32) per-token or (B, 32) pooled.
         Returns: (B, 3, 32, 32)
         """
         out, _ = self.forward_with_attention(x, t_emb, text_emb)
@@ -202,8 +216,11 @@ class MicroUNet(nn.Module):
         B, C, H, W = e3.shape
         # Reshape to patches: (B, H*W, C)
         patches = e3.permute(0, 2, 3, 1).reshape(B, H * W, C)
-        # Text features: (B, 1, text_dim) - single text embedding treated as 1 token
-        text_feat = text_emb.unsqueeze(1)  # (B, 1, 32)
+        # Text features: (B, T, text_dim) per-token or (B, 1, text_dim) if pooled
+        if text_emb.dim() == 2:
+            text_feat = text_emb.unsqueeze(1)  # backward compat: (B, 1, 32)
+        else:
+            text_feat = text_emb               # already (B, T, 32)
 
         attn_out, attn_weights = self.cross_attn(patches, text_feat)
         # Residual connection + reshape back to spatial
