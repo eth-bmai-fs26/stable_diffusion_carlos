@@ -1,0 +1,867 @@
+\documentclass[11pt,a4paper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+% ── Colors (Okabe–Ito colorblind-safe palette) ───────────────────────────
+\definecolor{cOrange}{HTML}{E69F00}
+\definecolor{cBlue}{HTML}{0072B2}
+\definecolor{cSky}{HTML}{56B4E9}
+\definecolor{cVermillion}{HTML}{D55E00}
+\definecolor{cPurple}{HTML}{CC79A7}
+\definecolor{cGray}{HTML}{999999}
+
+% ── tcolorbox styles ─────────────────────────────────────────────────────
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{keyinsight}[1][]{%
+  enhanced, breakable,
+  colback=cSky!8, colframe=cBlue,
+  fonttitle=\bfseries, title=Key Insight,
+  left=4pt, right=4pt, top=4pt, bottom=4pt, #1}
+
+\newtcolorbox{managerbox}[1][]{%
+  enhanced, breakable,
+  colback=cOrange!8, colframe=cOrange,
+  fonttitle=\bfseries, title=Manager's Briefing,
+  left=4pt, right=4pt, top=4pt, bottom=4pt, #1}
+
+\newtcolorbox{pitfall}[1][]{%
+  enhanced, breakable,
+  colback=cVermillion!8, colframe=cVermillion,
+  fonttitle=\bfseries, title=Common Pitfall,
+  left=4pt, right=4pt, top=4pt, bottom=4pt, #1}
+
+% ── Header / Footer ──────────────────────────────────────────────────────
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{\small Stable Diffusion from Scratch}
+\rhead{\small A Decision-Maker's Guide}
+\cfoot{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% ── Section styling ──────────────────────────────────────────────────────
+\titleformat{\section}{\Large\bfseries\color{cBlue}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{cBlue!80!black}}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{cBlue!60!black}}{\thesubsubsection}{1em}{}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=cBlue,
+  urlcolor=cBlue!80!black
+}
+
+% ══════════════════════════════════════════════════════════════════════════
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Huge\bfseries Stable Diffusion from Scratch\\[0.4em]}
+{\LARGE\color{cBlue} A Decision-Maker's Guide}
+
+\vspace{2cm}
+{\Large Lecture Notes}
+
+\vspace{1.5cm}
+{\large CAS BMAI --- ETH Z\"urich}
+
+\vspace{3cm}
+\begin{tabular}{rl}
+\textbf{Format:} & 5 interactive notebooks, approx.\ 2.5 hours total \\
+\textbf{Prerequisites:} & None (ability to click ``Run'' in Google Colab) \\
+\textbf{Audience:} & Managers and non-technical leaders \\
+\end{tabular}
+
+\vfill
+{\small \today}
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Introduction}
+\label{sec:intro}
+
+Text-to-image generation---the ability to produce photorealistic pictures
+from a short textual description---has moved from a research curiosity to a
+strategic capability in less than three years.  Products such as DALL-E,
+Midjourney, and Stable Diffusion now power content pipelines in marketing,
+e-commerce, entertainment, and product design.
+
+These lecture notes accompany a hands-on course in which participants
+\emph{build} a miniature text-to-image system themselves, step by step.
+The system is small enough to train on a laptop (approximately 300\,K
+parameters) yet architecturally identical to the full-scale models used
+in production.  The goal is not to turn managers into machine-learning
+engineers but to equip them with a \emph{working mental model} of the
+technology---one precise enough to evaluate vendors, diagnose failures,
+and ask engineering teams the right questions.
+
+\subsection{The Co-Pilot Metaphor}
+
+Throughout the course we use a single, consistent analogy that maps every
+technical component to a familiar concept:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{>{\bfseries}l l}
+\toprule
+Technical Component & Metaphor \\
+\midrule
+Diffusion model (U-Net) & The \emph{driver}---knows how to navigate but not where to go \\
+Text prompt & The \emph{destination} \\
+CLIP text encoder & The \emph{co-pilot} reading the map \\
+Cross-attention & The driver asking the co-pilot at every turn \\
+Guidance scale & How \emph{loudly} the co-pilot speaks \\
+Negative prompt & The co-pilot saying ``NOT that way'' \\
+Random seed & The random road network \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+By the end of Notebook~5 you will have assembled all parts of this
+``car'' and driven it yourself.
+
+\subsection{Toy Dataset}
+
+All experiments use a \textbf{programmatically generated} dataset of
+coloured geometric shapes on a 32$\times$32 pixel canvas:
+
+\begin{itemize}[nosep]
+  \item \textbf{Shapes:} circle, square, triangle
+  \item \textbf{Colours:} red, blue, green
+  \item \textbf{Base dataset:} 9 classes (3 shapes $\times$ 3 colours)
+  \item \textbf{Extended dataset (Notebook~5):} 36 classes (adding
+        small/large and centred/offset)
+\end{itemize}
+
+Because every image is generated with known ground truth, we can measure
+model quality objectively at every stage---an advantage rarely available
+with real-world data.
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Notebook 1: The Raw Ingredients---Images and Text as Numbers}
+\label{sec:nb1}
+
+\textit{Approx.\ 25 minutes.  Metaphor: ``Here are the parts of the car
+and the map.''}
+
+\subsection{Cold Open: The End Product}
+
+The notebook opens with a striking demonstration: a pre-trained model
+generates coloured shapes from two-word prompts such as ``red circle'' or
+``blue square.''  Participants see the finished product \emph{before}
+learning how it works---establishing a concrete target for the sessions
+ahead.
+
+\subsection{What Computers See: Images as Tensors}
+
+A digital image is stored as a three-dimensional grid of numbers---a
+\textbf{tensor} of shape $H \times W \times C$, where $H$ is the height
+in pixels, $W$ the width, and $C$ the number of colour channels (three
+for RGB).  Each entry is a value between 0 and 1 representing the
+intensity of one colour at one pixel location.
+
+In the interactive exercise, participants adjust \textbf{brightness} and
+\textbf{contrast} sliders and watch the raw numbers update in real time,
+building intuition for how visual changes correspond to numerical changes.
+
+\subsection{Words as Numbers: Embedding Vectors}
+
+Computers cannot process words directly.  Instead, every word is mapped
+to a list of numbers called an \textbf{embedding vector}.  Words with
+similar meanings end up close together in this numerical space; unrelated
+words end up far apart.
+
+The notebook visualises nine word embeddings (colours and shapes)
+projected onto a two-dimensional plane, letting participants see that
+``red,'' ``blue,'' and ``green'' cluster together, while ``circle,''
+``square,'' and ``triangle'' form a separate cluster.
+
+The notion of ``closeness'' is quantified by \textbf{cosine similarity}:
+two vectors pointing in roughly the same direction score near~1;
+orthogonal vectors score~0.
+
+\subsection{Productive Failure: The Random Projection}
+
+Participants attempt to compare raw pixel vectors to text embeddings
+using a na\"ive random projection.  The resulting similarity matrix shows
+a random pattern with no meaningful structure.
+
+\begin{pitfall}
+Image pixels and word embeddings live in completely different numerical
+spaces.  A random projection cannot bridge them---the similarity matrix
+looks like noise.  Bridging this gap requires \emph{joint training}, as
+we will see in Notebook~2.
+\end{pitfall}
+
+\begin{managerbox}
+\textbf{Resolution = Cost.}  Our toy images are $32 \times 32 = 3{,}072$
+numbers.  Stable Diffusion operates at $512 \times 512 = 786{,}432$
+numbers; SDXL at $1024 \times 1024 = 3{,}145{,}728$ numbers.  Higher
+resolution means proportionally more computation and cost.
+
+\textbf{Vendor question:} ``What resolution does your model generate
+natively?''
+\end{managerbox}
+
+\begin{managerbox}
+\textbf{Joint vs.\ Post-Hoc Alignment.}  One could train an image system
+and a text system separately, then bolt them together after the fact
+(\emph{post-hoc} alignment).  As the random-projection failure
+demonstrates, this does not work.  Effective systems train text and image
+encoders \emph{jointly} from the start---the approach taken by CLIP.
+
+\textbf{Vendor question:} ``Was your text encoder trained jointly with
+your image model?''
+\end{managerbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Notebook 2: The Translator---CLIP}
+\label{sec:nb2}
+
+\textit{Approx.\ 30 minutes.  Metaphor: ``The co-pilot learns to read
+the map.''}
+
+\subsection{The Core Idea: Contrastive Learning}
+
+\textbf{CLIP} (Contrastive Language--Image Pre-training) learns to place
+images and their corresponding text descriptions \emph{near each other}
+in a shared numerical space, while pushing mismatched pairs apart.
+
+Training proceeds as follows:
+
+\begin{enumerate}[nosep]
+  \item Collect a batch of image--text pairs.
+  \item Pass each image through an \textbf{image encoder} to obtain an
+        image embedding.
+  \item Pass each text through a \textbf{text encoder} to obtain a text
+        embedding.
+  \item Compute the cosine similarity between every image embedding and
+        every text embedding in the batch.
+  \item Adjust the encoders so that \emph{matching} pairs score high and
+        \emph{non-matching} pairs score low.
+\end{enumerate}
+
+The loss function that drives this adjustment is called \textbf{InfoNCE}
+(with a temperature parameter $\tau = 0.07$).  It is computed
+symmetrically: text-to-image and image-to-text, averaged together.
+
+\begin{keyinsight}
+After training, CLIP provides a \emph{common language} for images and
+text.  You can compare an image to a sentence---or two images, or two
+sentences---simply by measuring the cosine similarity of their embedding
+vectors.
+\end{keyinsight}
+
+\subsection{Watching CLIP Learn}
+
+An interactive \textbf{epoch slider} (0 to 100) shows a PCA projection
+of both text embeddings (orange circles) and image embeddings (blue
+squares).  At epoch~0, matching pairs are scattered randomly.  As
+training progresses, matching text and image embeddings migrate toward
+each other until, by epoch~100, all nine pairs are tightly aligned.
+
+\subsection{Building Mini-CLIP}
+
+Participants inspect two small neural networks:
+
+\begin{itemize}[nosep]
+  \item \textbf{Text encoder:} word embedding (vocabulary of 12 tokens,
+        32 dimensions) $\to$ mean pooling $\to$ two linear layers with
+        ReLU $\to$ L2 normalisation.
+  \item \textbf{Image encoder:} flatten $32 \times 32 \times 3 = 3{,}072$
+        pixels $\to$ two linear layers with ReLU $\to$ L2 normalisation.
+\end{itemize}
+
+The complete Mini-CLIP model has approximately 200K parameters and trains
+in $\sim$15 seconds on a CPU.
+
+\subsection{Productive Failure: Memorisation vs.\ Generalisation}
+
+When Mini-CLIP is trained on only \textbf{three} image--text pairs (red
+circle, blue square, green triangle), it memorises them perfectly---the
+similarity matrix shows three bright spots on the diagonal.  But it fails
+completely on the other six classes: the off-diagonal entries are noise.
+
+The model has \emph{memorised} individual pairs rather than learning
+general concepts (``redness,'' ``circularity'').  Only when all nine pairs
+are used does the model generalise.
+
+\subsection{The Fix: Partial Matches Reveal Concept Learning}
+
+With all nine training pairs, Mini-CLIP learns transferable concepts.
+The text ``red square'' has moderate similarity to the image of a ``red
+circle'' (shared colour), and ``blue circle'' scores well against ``green
+circle'' (shared shape).  This \emph{partial-match} structure proves that
+the model learned colour and shape as independent features---not just
+rote associations.
+
+\subsubsection*{Real-World Story: The CLIP Bias Problem}
+
+Researchers discovered that CLIP embeddings encode societal biases present
+in web-scraped training data.  Searching for ``CEO'' retrieves
+predominantly white male faces; ``criminal'' retrieves disproportionately
+Black men.  The diagnosis: contrastive learning faithfully encodes
+correlations in the data---including unwanted ones.
+
+\begin{managerbox}
+\textbf{Fine-Tuning CLIP.}
+\begin{itemize}[nosep]
+  \item \textbf{Too few pairs} $\to$ memorisation.
+  \item \textbf{Enough pairs} $\to$ concept learning.
+  \item \textbf{Massive corpus} $\to$ rich, transferable knowledge.
+\end{itemize}
+\textbf{Vendor questions:} How large is the training set?  Has
+demographic bias been tested?  How do you prevent catastrophic
+forgetting when fine-tuning?
+\end{managerbox}
+
+\begin{managerbox}
+\textbf{Practical Tool: Bias Auditing.}  You can audit a CLIP model by
+computing cosine similarity between a concept embedding (e.g.,
+``doctor,'' ``engineer,'' ``nurse'') and embeddings of demographically
+varied images.  High variance in similarity scores across demographics
+signals bias encoded in the model.
+\end{managerbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Notebook 3: The Engine---Diffusion}
+\label{sec:nb3}
+
+\textit{Approx.\ 35 minutes.  Metaphor: ``The driver learns to navigate
+by being dropped at random locations.''}
+
+\subsection{Forward Process: Adding Noise}
+
+The diffusion framework rests on a surprisingly simple idea.  Start with
+a clean image and gradually add random noise, step by step, until the
+image becomes pure static.  This is the \textbf{forward process}---it is
+easy, deterministic given the noise schedule, and requires no learning.
+
+\subsection{Reverse Process: Denoising}
+
+The creative act is running this process \emph{in reverse}: starting from
+pure noise and removing noise step by step until a clean image emerges.
+A neural network---the \textbf{denoiser}---is trained to predict the noise
+that was added at each step.  Given a noisy image and the current step
+number, it outputs an estimate of the noise, which is then subtracted.
+
+Repeating this subtraction across all steps (50 in the demo) transforms
+random static into a coherent image.
+
+\subsection{The Cosine Noise Schedule}
+
+The rate at which noise is added is controlled by a \textbf{noise
+schedule}.  The course uses a \textbf{cosine schedule}, which adds noise
+slowly at first, accelerates in the middle, and tapers at the end.  The
+schedule is parameterised by cumulative noise levels $\bar{\alpha}_t$:
+at $t = 0$, $\bar{\alpha}_0 = 1$ (clean image); at $t = T$,
+$\bar{\alpha}_T \approx 0$ (pure noise).
+
+An interactive \textbf{timestep slider} (0--50) lets participants watch a
+single image progress from clean to noisy, with the schedule curve
+displayed alongside.
+
+\subsection{Noise Prediction Loss}
+
+The training objective is straightforward: given a noisy image at
+timestep~$t$, the denoiser predicts the noise that was added.  The loss
+is the mean squared error between the predicted noise and the true noise.
+
+\subsection{Productive Failure: The Na\"ive MLP}
+
+Participants first train a \textbf{fully connected network (MLP)} as the
+denoiser.  The MLP flattens the image into a single vector, destroying
+all spatial structure.
+
+The result: the MLP generates images indistinguishable from pure noise.
+It has learned nothing useful because it cannot exploit the two-dimensional
+structure of images.
+
+\begin{pitfall}
+A na\"ive MLP treats every pixel independently and has no notion of
+spatial neighbourhood.  Flattening a 2D image into a 1D vector discards
+exactly the structure needed for coherent image generation.
+\end{pitfall}
+
+\begin{keyinsight}
+The architecture of the denoiser determines \emph{what kinds of
+structure} the model can learn.  Choosing the right architecture is not a
+minor implementation detail---it is a strategic decision that shapes
+output quality.  The fix: switch to a \textbf{convolutional}
+architecture (the U-Net, introduced in Notebook~4).
+\end{keyinsight}
+
+\subsubsection*{Real-World Story: The Deepfake Dilemma}
+
+In 2023, AI-generated images were submitted as legal evidence.  They
+looked photorealistic because photorealism is the explicit \emph{training
+objective}---the model minimises the difference between generated and
+real image distributions.  Detecting AI-generated content requires
+specialised tools that exploit subtle frequency-domain artefacts left by
+the generation process.
+
+\begin{managerbox}
+\textbf{Denoising Steps = Cost.}  Each denoising step requires a full
+forward pass through the neural network.  Fifty steps means fifty times
+the compute of a single image classification.
+
+\begin{center}
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{ll}
+\toprule
+Setting & Steps \\
+\midrule
+Standard quality & 50 \\
+Production (balanced) & 20--50 \\
+Fast / distilled models & 1--4 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Vendor questions:} How many denoising steps does your model use?
+Is guidance computed in parallel or serially?  Can users trade quality
+for speed?
+\end{managerbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Notebook 4: The Conversation---Cross-Attention}
+\label{sec:nb4}
+
+\textit{Approx.\ 30 minutes.  Metaphor: ``At every turn, the driver asks
+the co-pilot.''}
+
+\subsection{From Unconditional to Conditional Generation}
+
+The diffusion model from Notebook~3 generates images, but it has no way
+to steer \emph{what} it generates.  The driver can navigate but does not
+know the destination.  We need a mechanism for the text prompt (via CLIP
+embeddings) to influence the denoising process at every step.
+
+\subsection{The MicroUNet Architecture}
+
+The notebook introduces a small convolutional denoiser---the
+\textbf{MicroUNet} ($\sim$160K parameters)---with the following
+structure:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Encoder:} three convolutional layers with GroupNorm,
+        progressively downsampling the $32 \times 32$ image to an
+        $8 \times 8$ feature map (128 channels).
+  \item \textbf{Bottleneck:} timestep injection via a learned embedding,
+        plus a \textbf{cross-attention layer} connecting image features to
+        text features.
+  \item \textbf{Decoder:} two transposed convolutions with skip
+        connections from the encoder, restoring the original resolution.
+\end{enumerate}
+
+\subsection{How Cross-Attention Works}
+
+Cross-attention is the mechanism by which image features ``consult'' text
+features during denoising.  At the bottleneck of the U-Net:
+
+\begin{enumerate}[nosep]
+  \item The 64 image patches (8$\times$8 spatial grid, 128-dimensional
+        features) produce \textbf{queries}~(Q): ``What should I look
+        like here?''
+  \item The per-token text embeddings (32-dimensional) produce
+        \textbf{keys}~(K) and \textbf{values}~(V): ``Here is what the
+        prompt says.''
+  \item Each query is compared to all keys via a scaled dot-product
+        similarity.
+  \item The resulting \textbf{attention weights} determine how much each
+        text token influences each spatial location.
+  \item The weighted values are projected back to 128 dimensions and
+        added as a \textbf{residual connection} to the image features.
+\end{enumerate}
+
+This process repeats at every denoising step, providing continuous
+text guidance.
+
+\begin{keyinsight}
+Cross-attention is not a one-time instruction; it is a \emph{continuous
+conversation} between the image being generated and the text prompt.  At
+every denoising step and at every spatial location, the image ``asks''
+the text what to do.
+\end{keyinsight}
+
+\subsection{Demo: Cross-Attention ON vs.\ OFF}
+
+A side-by-side comparison shows the same model generating with
+cross-attention enabled (sharp, text-aligned shapes) versus disabled
+(blurry, generic output).  The contrast is immediate and dramatic.
+
+\subsection{Visualising Attention Heatmaps}
+
+Attention weights are visualised as heatmaps over the $8 \times 8$
+spatial grid, one heatmap per text token.  Participants observe that the
+token ``red'' activates the spatial locations where the shape appears,
+while ``circle'' activates the shape's boundary region.
+
+\subsection{Interactive Explorer: Guidance Scale}
+
+A slider varies the \textbf{guidance scale} from 1.0 to 15.0, showing
+five side-by-side generations:
+
+\begin{itemize}[nosep]
+  \item \textbf{Low scale ($\sim$1):} the co-pilot whispers---creative
+        but unfocused output.
+  \item \textbf{Sweet spot (7--10):} the co-pilot speaks clearly---sharp,
+        text-faithful results.
+  \item \textbf{High scale ($>$10):} the co-pilot shouts---follows
+        instructions obsessively but may oversaturate.
+\end{itemize}
+
+\subsection{Productive Failure: Uniform Attention}
+
+When attention weights are forced to be \emph{uniform} (every text token
+influences every pixel equally---``co-pilot with earplugs''), the output
+collapses into a blurry, generic blob that ignores the prompt entirely.
+Restoring the learned attention weights immediately recovers sharp,
+text-aligned generation.
+
+\subsubsection*{Real-World Story: The E-Commerce Material Swap}
+
+A company prompted a model with ``silver watch on wooden table.''  The
+output: a wooden-looking watch on a metallic table.  This
+\emph{attribute binding} failure arises because cross-attention has no
+built-in constraint forcing attributes (``silver,'' ``wooden'') to bind
+to the correct objects.
+
+\begin{managerbox}
+\textbf{Compositional Accuracy.}  Cross-attention enables text guidance
+but suffers from the \emph{attribute binding problem}: when multiple
+objects and attributes are present, the model can swap which attribute
+belongs to which object.  There is no hard architectural constraint
+preventing this.
+
+\textbf{Vendor question:} ``Can you show me attention maps for a failed
+generation?''  Attention visualisation reveals \emph{why} a model
+produced a wrong output---invaluable for debugging.
+\end{managerbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Notebook 5: The Road Trip---The Full Pipeline}
+\label{sec:nb5}
+
+\textit{Approx.\ 30 minutes.  Metaphor: ``Start the engine, set the
+destination, drive.''}
+
+\subsection{Assembling the Pipeline}
+
+In this final notebook, all components are wired together into a complete
+text-to-image system:
+
+\begin{enumerate}[nosep]
+  \item The \textbf{text prompt} is encoded by the trained Mini-CLIP
+        text encoder into per-token embeddings.
+  \item A \textbf{random noise image} is sampled (determined by the
+        seed).
+  \item Over 50 denoising steps, the \textbf{MicroUNet} progressively
+        removes noise, consulting the text embedding via
+        \textbf{cross-attention} at each step.
+  \item The final output is a clean, generated image matching the prompt.
+\end{enumerate}
+
+The climactic moment of the course: participants type a prompt such as
+``red circle'' and watch the system they built transform pure noise into
+a recognisable red circle, displayed as a filmstrip of intermediate
+denoising frames.
+
+\subsection{Classifier-Free Guidance}
+
+At each denoising step, the model runs \textbf{two forward passes}:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Conditional:} the U-Net receives the actual text
+        embedding.
+  \item \textbf{Unconditional:} the U-Net receives a null (empty) text
+        embedding.
+\end{enumerate}
+
+The two predictions are blended:
+\[
+  \hat{\epsilon} = \epsilon_{\text{uncond}} + s \cdot
+  (\epsilon_{\text{cond}} - \epsilon_{\text{uncond}})
+\]
+where $s$ is the guidance scale.  A scale of $s = 1$ yields purely
+unconditional generation; values of $s = 7$--$10$ produce sharp,
+text-faithful images; very high values ($s > 15$) cause oversaturation
+and artefacts.
+
+In the co-pilot metaphor: the guidance scale controls how loudly the
+co-pilot speaks.  Too quiet and the driver wanders; too loud and the
+driver oversteers.
+
+\subsection{Interactive Prompt Lab}
+
+Participants experiment freely with:
+\begin{itemize}[nosep]
+  \item A \textbf{prompt dropdown} (all 9 base classes plus variations)
+  \item A \textbf{seed slider} (0--999)
+  \item A \textbf{guidance scale slider} (1.0--15.0)
+\end{itemize}
+
+Each generation displays a filmstrip of eight intermediate denoising
+frames, making the progressive refinement process visible.
+
+\subsection{Productive Failure: Compositional Complexity}
+
+The dataset is expanded from 9 classes to \textbf{36 classes} (adding
+two sizes and two positions).  The model's colour and shape accuracy
+drops, especially when multiple attributes must bind correctly (e.g.,
+``small red circle'' sometimes produces a small circle with red appearing
+elsewhere).
+
+This demonstrates the fundamental \textbf{combinatorial challenge}:
+the number of possible attribute combinations grows multiplicatively,
+but training data is finite.  Real-world models face the same scaling
+problem at vastly larger scale.
+
+\subsection{Safety: Where Would Filters Go?}
+
+The notebook discusses where safety filters belong in the pipeline:
+
+\begin{enumerate}[nosep]
+  \item \textbf{Text input:} reject or rewrite blocked prompts before
+        encoding.
+  \item \textbf{CLIP embedding:} check the embedding vector against
+        known harmful regions.
+  \item \textbf{Final image:} classify the output and block unsafe
+        content.
+\end{enumerate}
+
+Because text guidance operates at \emph{every} denoising step, a harmful
+prompt influences the entire generation process---making input-level
+filtering the most effective first line of defence.
+
+\subsection{Bridge to Real Tools}
+
+The toy model ($\sim$300K parameters) and production Stable Diffusion
+($\sim$860M parameters, 512$\times$512 output) share the \emph{same
+architecture}: CLIP text encoder, U-Net denoiser with cross-attention,
+cosine noise schedule, and classifier-free guidance.  The only difference
+is scale.  SDXL pushes further to $\sim$3.5B parameters and
+$1024 \times 1024$ resolution.  Understanding the toy system transfers
+directly to reasoning about production systems.
+
+\subsubsection*{Real-World Story: The Prompt Engineering Economy}
+
+Small wording changes---``a red circle'' versus ``circle, red''---produce
+different CLIP embeddings and therefore different outputs.  A marketing
+team discovered that switching from casual language to precise
+descriptors (``product photography of blue running sneaker, centred,
+white studio background\ldots'') dramatically improved consistency and
+quality.  Prompt sensitivity is an \emph{architectural property}, not a
+user error.
+
+\begin{managerbox}
+\textbf{Final Briefing.}  You have now built every component of a
+text-to-image system at miniature scale.  Real Stable Diffusion is
+roughly 25\,000$\times$ larger but \textbf{architecturally identical}.
+When your engineering team says ``increase the guidance scale,'' you know
+exactly what that means: two forward passes per step, blend the
+predictions, amplify the text signal.  You understand the system
+\emph{mechanically}, not vaguely.
+\end{managerbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{The Co-Pilot Reference Card}
+\label{sec:reference}
+
+Each notebook adds one row to a cumulative reference table.  By the end
+of Notebook~5, participants have a complete cheat sheet:
+
+\begin{center}
+\renewcommand{\arraystretch}{1.35}
+\small
+\begin{tabular}{@{} >{\bfseries}p{0.8cm} p{2.8cm} p{5cm} p{3.5cm} @{}}
+\toprule
+NB & Component & What It Does & Co-Pilot Metaphor \\
+\midrule
+1 & Raw Ingredients &
+  Images = tensors of numbers; text = embedding vectors;
+  cosine similarity measures closeness &
+  ``Here are the parts of the car and the map'' \\
+2 & CLIP (Translator) &
+  Learns a shared embedding space; contrastive loss pulls
+  matching pairs together &
+  ``The co-pilot learns to read the map'' \\
+3 & Diffusion (Engine) &
+  Forward: add noise.\ Reverse: predict \& remove noise.
+  U-Net preserves spatial structure &
+  ``The driver learns to navigate by being dropped at random
+  locations'' \\
+4 & Cross-Attention (Conversation) &
+  Q = image, K/V = text.\ Each image region checks the text.
+  Guidance scale = co-pilot volume &
+  ``At every turn, the driver asks the co-pilot'' \\
+5 & Full Pipeline (Road Trip) &
+  Wire it all together: noise $\to$ denoise with text
+  guidance $\to$ image.\ CFG = two passes &
+  ``Start the engine, set the destination, drive'' \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Five Questions to Ask an AI Image Generation Vendor}
+\label{sec:questions}
+
+\begin{enumerate}
+  \item \textbf{Resolution \& cost} (from NB\,1).  What resolution does
+        your model generate natively, and what is the per-image compute
+        cost?
+  \item \textbf{Training data \& bias} (from NB\,2).  How large and
+        diverse is your training dataset?  What bias audits have been
+        conducted?
+  \item \textbf{Architecture \& speed} (from NB\,3).  How many denoising
+        steps does your model use?  Can users trade quality for speed?
+  \item \textbf{Diagnostics} (from NB\,4).  Can you provide attention
+        maps or other interpretability tools to diagnose failed
+        generations?
+  \item \textbf{Reproducibility} (from NB\,5).  Does your system log
+        random seeds and model versions for every generated asset,
+        enabling deterministic replay?
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Vendor Evaluation: Decision Tree}
+\label{sec:decision}
+
+When adopting AI image generation, organisations face three broad
+options:
+
+\begin{description}[style=nextline, leftmargin=1.5cm]
+  \item[API Service] Use a third-party API (e.g., OpenAI, Stability AI).
+    Best when: speed to market is paramount, volume is moderate, and
+    customisation needs are low.  Trade-off: the vendor controls model
+    updates and data handling.
+  \item[Fine-Tuned Model] Take a pre-trained open model and fine-tune it
+    on proprietary data.  Best when: domain-specific quality matters
+    (e.g., your brand's visual style) and you have in-house ML capacity.
+    Trade-off: faster convergence but requires curating training data.
+  \item[Self-Hosted Model] Deploy a model entirely on your own
+    infrastructure.  Best when: data privacy is non-negotiable, you need
+    full control, and you have significant engineering resources.
+    Trade-off: you bear all compute cost and model maintenance.
+\end{description}
+
+The right choice depends on your organisation's constraints along four
+axes: \textbf{data sensitivity}, \textbf{customisation depth},
+\textbf{engineering capacity}, and \textbf{cost structure}.
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Jargon Decoder}
+\label{sec:jargon}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.3}
+\small
+\begin{tabular}{@{} >{\bfseries}p{3.5cm} p{9cm} @{}}
+\toprule
+Term & Plain-Language Definition \\
+\midrule
+Tensor & A multi-dimensional grid of numbers (an image is a 3-D tensor) \\
+Embedding & A list of numbers representing a word, sentence, or image in a form computers can process \\
+Cosine similarity & A score measuring how similar two embeddings are (1 = identical direction, 0 = unrelated) \\
+CLIP & A model that learns to place matching images and texts near each other in a shared number space \\
+Contrastive learning & A training strategy that pushes matches together and mismatches apart \\
+Diffusion & A generative process that creates images by iteratively removing noise from random static \\
+U-Net & A convolutional neural network with skip connections, well suited for image denoising \\
+Cross-attention & A mechanism allowing one type of data (images) to query another (text) for guidance \\
+Guidance scale & A parameter controlling how strongly the text prompt influences image generation \\
+Noise schedule & The plan governing how quickly noise is added or removed at each step \\
+Latent space & A compressed numerical representation where images are manipulated more efficiently \\
+VAE & Variational Auto-Encoder: compresses images into latent space and reconstructs them back \\
+LoRA & Low-Rank Adaptation: a lightweight fine-tuning technique that modifies only a small fraction of model weights \\
+Fine-tuning & Further training of an existing model on specialised data to improve domain-specific quality \\
+Inpainting & Selectively regenerating a chosen region of an image while keeping the rest unchanged \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Red Flags When Evaluating Vendors}
+\label{sec:redflags}
+
+\begin{enumerate}
+  \item \textbf{``We use a proprietary architecture.''}  If the vendor
+        cannot describe their model's architecture, you cannot evaluate
+        its limitations or plan for adaptation.
+  \item \textbf{No guidance scale parameter.}  Without user-controllable
+        guidance, you cannot tune the balance between creativity and
+        prompt fidelity for your use case.
+  \item \textbf{Fixed single-step generation.}  A system that does not
+        expose the number of denoising steps removes a key quality--speed
+        trade-off lever.
+  \item \textbf{No API for custom training.}  If the vendor offers no
+        path to fine-tuning, you are permanently locked into their base
+        model's capabilities and biases.
+  \item \textbf{No bias or safety audit.}  The vendor cannot describe
+        what biases exist in their training data, what safety filters are
+        in place, or how content provenance is tracked.
+\end{enumerate}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Conclusion}
+\label{sec:conclusion}
+
+The core architecture of text-to-image generation rests on three
+learnable components---a text--image alignment model (CLIP), a
+convolutional denoising network (MicroUNet with diffusion), and a
+conditioning mechanism (cross-attention)---plus a set of carefully chosen
+hyper-parameters (cosine noise schedule, guidance scale, seed).
+
+None of these pieces is, on its own, mysterious.  Images are grids of
+numbers.  Text is lists of numbers.  CLIP aligns the two.  Diffusion
+learns to remove noise.  Cross-attention lets text steer the denoiser.
+Classifier-free guidance amplifies the text signal.  The compound system
+produces results that feel like magic, but every step is auditable,
+tuneable, and---as you have now experienced first-hand---buildable from
+scratch.
+
+Understanding these building blocks transforms the conversation with
+engineering teams and vendors from ``Can the AI do this?''\ to ``Which
+component is responsible for this limitation, and what would it take to
+fix it?''
+
+\vfill
+
+\begin{center}
+\small\color{cGray}
+\textit{These lecture notes accompany the interactive course
+``Stable Diffusion from Scratch: A Decision-Maker's Guide.''}\\
+\textit{All interactive elements, code exercises, and pre-/post-course
+quizzes are available in the companion Jupyter notebooks.}
+\end{center}
+
+\end{document}
